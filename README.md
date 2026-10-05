@@ -1,4 +1,4 @@
-# MediaGrab 1.0.0 — Firefox extension + Windows companion
+# MediaGrab 1.0.1 — Firefox extension + Windows companion
 
 ## Install (for users)
 

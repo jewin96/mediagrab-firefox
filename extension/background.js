@@ -5,6 +5,7 @@
  */
 
 const HOST_NAME = "com.mediagrab.host";
+const NAV_GRACE_MS = 5000;           // media found this recently before a page-less navigation is kept (see tabs.onUpdated)
 const MIN_HOST_VERSION = "1.0.0";   // oldest companion this extension version works with
 const MAX_ITEMS_PER_TAB = 60;
 const PING_TIMEOUT_MS = 6000;
@@ -681,7 +682,11 @@ browser.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
   const st = await getTab(tabId);
   const sig = MG.pageSignature(changeInfo.url);
   if (st.meta.navSig && st.meta.navSig !== sig) {
-    st.items.clear(); st.children.clear(); st.childPaths.clear(); st.rejected.clear(); st.meta = {};
+    // A player usually starts fetching its stream a moment BEFORE the URL change is reported, so media found in the last few
+    // seconds already belongs to the page being opened and is kept; everything older belonged to the previous page.
+    const cutoff = Date.now() - NAV_GRACE_MS;
+    for (const [k, i] of st.items) if (i.discoveredAt < cutoff) st.items.delete(k);
+    st.children.clear(); st.childPaths.clear(); st.rejected.clear(); st.meta = {};
     persistSoon(tabId);
     updateBadge(tabId);
   }

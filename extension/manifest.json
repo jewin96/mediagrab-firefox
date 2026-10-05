@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MediaGrab",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Detect and download media you are authorized to save, including unencrypted HLS/DASH through the optional MediaGrab Companion.",
   "author": "MediaGrab",
   "permissions": [

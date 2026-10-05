@@ -214,8 +214,12 @@ const jobUpdates = (x, jobId) => x.sent.filter((m) => m.type === "job-update" &&
     eq((await tabState(y, 33)).items.length, 1);
     y.browser.tabs.onUpdated.fire(33, { url: "https://www.example.test/watch?v=AAA&t=30s#x" }); await sleep(30);
     eq((await tabState(y, 33)).items.length, 1, "same video must keep its media");
+    await sleep(5300);    // the old video's media is now older than the navigation grace window (5 s)
+    // the NEW video's stream starts loading just before the URL change is reported: it must survive
+    await y.net(33, server.base + "/media/file/song.mp3", { contentType: "audio/mpeg", resHeaders: [{ name: "Content-Length", value: "480000" }] });
     y.browser.tabs.onUpdated.fire(33, { url: "https://www.example.test/watch?v=BBB" }); await sleep(30);
-    eq((await tabState(y, 33)).items.length, 0, "new video must start clean");
+    const after = await tabState(y, 33);
+    eq(after.items.map((i) => i.url.split("/").pop()), ["song.mp3"], "old video cleared, new video's early request kept");
   });
 
   await test("ONLY REAL FILES: an HTML error page behind an .m3u8 URL is not listed", async () => {
@@ -350,6 +354,7 @@ const jobUpdates = (x, jobId) => x.sent.filter((m) => m.type === "job-update" &&
     await y.message({ type: "page-meta", title: "T", url: PAGE }, { tab: { id: 9, url: PAGE }, frameId: 0 });
     await y.net(9, server.base + "/media/file/clip.mp4", { contentType: "video/mp4" });
     eq((await tabState(y, 9)).items.length, 1);
+    await sleep(5300);   // media younger than the 5 s navigation grace window is kept (it may belong to the new page)
     y.browser.tabs.onUpdated.fire(9, { status: "loading", url: "http://example.test/other" });
     await sleep(50);
     eq((await tabState(y, 9)).items.length, 0, "cleared on navigation");

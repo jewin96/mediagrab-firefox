@@ -190,7 +190,7 @@ class Marionette {
     // 6) single-page-app navigation (YouTube-style): stale og: tags, URL+title change without reload
     await m.cmd("WebDriver:SwitchToWindow", { handle: pageHandle });
     await m.cmd("WebDriver:Navigate", { url: server.base + "/media/spa.html" });
-    await sleep(2500);
+    await sleep(6500);   // longer than the navigation grace window, so the "previous video" counts as old
     await m.js(`window.wrappedJSObject.go()`);
     await sleep(6000);
     await m.cmd("WebDriver:SwitchToWindow", { handle: String(popupHandle) });

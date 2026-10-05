@@ -11,6 +11,9 @@ function absoluteUrl(value) {
 // change since the first page load are left-overs.
 let navStart = 0;
 let spaNavigated = false;
+const initialSignature = MG.pageSignature(location.href);
+// True as soon as the address no longer matches the page that was loaded (no waiting for our polling to notice).
+const navigatedSinceLoad = () => spaNavigated || MG.pageSignature(location.href) !== initialSignature;
 const initialOgImage = document.querySelector('meta[property="og:image"]')?.content || "";
 
 function siteName() { return document.querySelector('meta[property="og:site_name"]')?.content?.trim() || ""; }
@@ -34,7 +37,7 @@ function bestThumbnail() {
   const yt = youtubeVideoId();
   if (yt && /^[\w-]{6,20}$/.test(yt)) return `https://i.ytimg.com/vi/${yt}/hqdefault.jpg`;   // og:image is stale after in-page navigation
   if (!ogFresh()) return "";
-  if (spaNavigated && (document.querySelector('meta[property="og:image"]')?.content || "") === initialOgImage) return "";
+  if (navigatedSinceLoad() && (document.querySelector('meta[property="og:image"]')?.content || "") === initialOgImage) return "";
   for (const sel of ['meta[property="og:image"]', 'meta[name="twitter:image"]', 'meta[property="twitter:image"]', 'link[rel="image_src"]']) {
     const el = document.querySelector(sel);
     const url = absoluteUrl(el?.content || el?.href || "");
@@ -125,7 +128,7 @@ function onUrlChange() {
   if (location.href === lastHref) return;
   lastHref = location.href;
   spaNavigated = true;
-  navStart = performance.now();
+  navStart = performance.now() - 5000;   // a player's first requests can precede our (polled) detection of the URL change
   hookMediaElements();
   for (const ms of [0, 1200, 3500, 8000]) setTimeout(report, ms);
 }
