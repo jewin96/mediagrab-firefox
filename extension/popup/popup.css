@@ -156,3 +156,5 @@ footer {
 }
 .audio-line { margin-top: 5px; font-size: 10px; color: var(--muted); }
 .audio-line select { max-width: 230px; }
+.ignored { margin: 0 8px 8px; padding: 9px 10px; border: 1px solid var(--border-soft); border-radius: 7px; background: #202026; color: var(--muted); font-size: 10.5px; line-height: 1.45; }
+.ignored b { color: var(--text); }

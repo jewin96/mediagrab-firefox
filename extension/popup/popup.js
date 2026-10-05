@@ -16,6 +16,7 @@ const rowByKey = new Map();      // item key -> row element
 const qualityByItem = new Map(); // item key -> chosen quality id ("" = best)
 const audioByItem = new Map();   // item key -> chosen audio track key ("" = automatic: the original track)
 let companion = null;            // last companion status
+let ignored = { counts: {}, samples: [] };   // what the background saw but did not list, by reason
 
 const send = (msg) => browser.runtime.sendMessage(msg);
 
@@ -311,6 +312,7 @@ function render() {
   itemsEl.textContent = "";
   if (!items.length) {
     itemsEl.innerHTML = '<div class="empty">No media detected yet.<br>Start playing the video, then press <b>↻</b>.</div>';
+    renderIgnored();
     return;
   }
   for (const item of items) {
@@ -320,6 +322,25 @@ function render() {
     const job = jobByItem.get(item.key);
     if (job) applyJob(row, job);
   }
+}
+
+// Explain why nothing is listed: what the page requested that looked like media, and why it was not offered.
+function renderIgnored() {
+  const c = ignored.counts || {};
+  const lines = [];
+  if (c["yt-ump"]) lines.push("This site streams in a session-bound format (YouTube's \"ump\" protocol). It is one protected stream, not a playlist or a file, so MediaGrab cannot download it.");
+  if (c.segment) lines.push(`${c.segment} piece${c.segment === 1 ? "" : "s"} of an adaptive stream were seen but no playlist for them. That is normal when the site hands the pieces to the player directly.`);
+  if (c.tiny) lines.push(`${c.tiny} tiny media file${c.tiny === 1 ? "" : "s"} (under 100 KB, e.g. sound effects) were ignored.`);
+  if (c["not-a-playlist"]) lines.push(`${c["not-a-playlist"]} link${c["not-a-playlist"] === 1 ? "" : "s"} looked like a stream but the server returned a web page.`);
+  if (!lines.length) return;
+  const box = document.createElement("div");
+  box.className = "ignored";
+  const head = document.createElement("b");
+  head.textContent = "Seen but not listed:";
+  box.appendChild(head);
+  for (const text of lines) { const p = document.createElement("div"); p.textContent = `• ${text}`; box.appendChild(p); }
+  box.title = (ignored.samples || []).map((s) => `${s.reason}: ${s.url}`).join("\n");
+  itemsEl.appendChild(box);
 }
 
 /* ---------- companion indicator ---------- */
@@ -376,6 +397,7 @@ async function load({ rescan = false } = {}) {
   if (rescan) { await send({ type: "rescan", tabId }); await new Promise((r) => setTimeout(r, 700)); }
   const state = await send({ type: "get-state", tabId });
   items = state.items || [];
+  ignored = state.ignored || { counts: {}, samples: [] };
   hostname = state.hostname || "global";
   subtitleEl.textContent = state.title || "Detected media";
   for (const job of state.jobs || []) jobByItem.set(job.itemKey, job);

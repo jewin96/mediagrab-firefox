@@ -26,7 +26,7 @@ function getTab(tabId) {
     tabLoads.set(tabId, (async () => {
       let saved = null;
       try { saved = (await browser.storage.session.get(`tab:${tabId}`))[`tab:${tabId}`]; } catch (_) {}
-      const state = { items: new Map(), meta: saved?.meta || {}, children: new Set(saved?.children || []), childPaths: new Set(saved?.childPaths || []), rejected: new Set(saved?.rejected || []) };
+      const state = { items: new Map(), meta: saved?.meta || {}, children: new Set(saved?.children || []), childPaths: new Set(saved?.childPaths || []), rejected: new Set(saved?.rejected || []), ignored: { counts: {}, samples: [] } };
       for (const it of saved?.items || []) state.items.set(it.key, it);
       tabStates.set(tabId, state);
       tabLoads.delete(tabId);
@@ -45,6 +45,17 @@ function persistSoon(tabId) {
       await browser.storage.session.set({ [`tab:${tabId}`]: { items: [...st.items.values()], meta: st.meta, children: [...st.children], childPaths: [...st.childPaths], rejected: [...st.rejected] } });
     } catch (_) {}
   }, 400));
+}
+
+// Requests that looked like media but were deliberately not listed, by reason - shown in the popup so "nothing detected"
+// is never a mystery. Reasons: segment, tiny, not-a-playlist, yt-ump (YouTube's session-bound stream protocol).
+function noteIgnored(tabId, reason, url, contentType = "") {
+  getTab(tabId).then((st) => {
+    st.ignored.counts[reason] = (st.ignored.counts[reason] || 0) + 1;
+    if (st.ignored.samples.length < 12 && !st.ignored.samples.some((s) => s.reason === reason && s.url === url)) {
+      st.ignored.samples.push({ reason, url: String(url).slice(0, 160), contentType });
+    }
+  }).catch(() => {});
 }
 
 function visibleItems(st) {
@@ -93,6 +104,7 @@ browser.webRequest.onHeadersReceived.addListener(
     requestHeaders.delete(details.requestId);
     if (details.statusCode >= 400) return;
     const contentType = headerValue(details.responseHeaders, "content-type");
+    if (/yt-ump/i.test(contentType)) { noteIgnored(details.tabId, "yt-ump", details.url, contentType); return; }
     if (!MG.isCandidate(details.url, contentType)) return;
 
     const len = Number.parseInt(headerValue(details.responseHeaders, "content-length"), 10);
@@ -117,7 +129,10 @@ async function addMedia(tabId, input) {
   if (!Number.isInteger(tabId) || tabId < 0 || !MG.isHttpUrl(input.url)) return;
   const kindHint = MG.mediaKind(input.url, input.contentType);
   const lengthForCheck = Number.isFinite(input.contentLength) ? input.contentLength : input.sliceLength;
-  if (MG.isSegmentLike(input.url, { contentType: input.contentType, length: lengthForCheck, partial: input.partial && !input.contentLength })) return;
+  if (MG.isSegmentLike(input.url, { contentType: input.contentType, length: lengthForCheck, partial: input.partial && !input.contentLength })) {
+    noteIgnored(tabId, "segment", input.url, input.contentType);
+    return;
+  }
 
   const st = await getTab(tabId);
   const key = MG.normalizeKey(input.url);
@@ -127,6 +142,7 @@ async function addMedia(tabId, input) {
   // Only real files: tiny direct audio/video (UI sounds, blips) is never offered.
   if (direct && Number.isFinite(input.contentLength) && input.contentLength > 0 && input.contentLength < MG.MIN_MEDIA_BYTES) {
     st.rejected.add(key); st.items.delete(key); persistSoon(tabId); updateBadge(tabId);
+    noteIgnored(tabId, "tiny", input.url, input.contentType);
     return;
   }
   let item = st.items.get(key);
@@ -181,7 +197,7 @@ async function probeSize(tabId, key) {
   clearTimeout(timer);
   item.probing = false;
   if (size) item.contentLength = size;
-  if (notMedia || (size && size < MG.MIN_MEDIA_BYTES)) { st.items.delete(key); st.rejected.add(key); }
+  if (notMedia || (size && size < MG.MIN_MEDIA_BYTES)) { st.items.delete(key); st.rejected.add(key); noteIgnored(tabId, notMedia ? "not-a-playlist" : "tiny", item.url, item.contentType); }
   persistSoon(tabId);
   updateBadge(tabId);
 }
@@ -246,8 +262,10 @@ async function analyzeManifest(tabId, key) {
     }
   } catch (err) {
     const msg = String(err?.message || err);
-    if (/^not an? (HLS|DASH)/i.test(msg)) {
-      // The URL returned something that is not a manifest (HTML error page, login wall): not a real stream.
+    // Only discard a "stream" when the page's OWN response was an HTML/text page (error page, login wall). Our second request
+    // may be answered differently by sites with session-bound links, so its result alone must never delete a real stream.
+    if (/^not an? (HLS|DASH)/i.test(msg) && /^text\/(html|plain)/i.test(item.contentType || "")) {
+      noteIgnored(tabId, "not-a-playlist", item.url, item.contentType);
       st.items.delete(key); st.rejected.add(key);
     } else item.manifest = { state: "unreadable", error: msg };
   }
@@ -643,7 +661,7 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
         duration: itemDuration(i, info.st), thumbnail: info.st.meta.thumbnail || "", pageTitle: info.title
       }));
       const tabJobs = [...jobs.values()].filter((j) => j.tabId === tabId);
-      return { items, jobs: tabJobs, title: info.title, hostname: info.hostname };
+      return { items, jobs: tabJobs, title: info.title, hostname: info.hostname, ignored: info.st.ignored };
     }
 
     case "download": return { ok: true, job: await handleDownload(message) };
@@ -657,7 +675,7 @@ browser.runtime.onMessage.addListener(async (message, sender) => {
 
     case "clear-media": {
       const st = await getTab(message.tabId);
-      st.items.clear(); st.children.clear(); st.childPaths.clear(); st.rejected.clear();
+      st.items.clear(); st.children.clear(); st.childPaths.clear(); st.rejected.clear(); st.ignored = { counts: {}, samples: [] };
       persistSoon(message.tabId);
       updateBadge(message.tabId);
       return { ok: true };
@@ -686,7 +704,7 @@ browser.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
     // seconds already belongs to the page being opened and is kept; everything older belonged to the previous page.
     const cutoff = Date.now() - NAV_GRACE_MS;
     for (const [k, i] of st.items) if (i.discoveredAt < cutoff) st.items.delete(k);
-    st.children.clear(); st.childPaths.clear(); st.rejected.clear(); st.meta = {};
+    st.children.clear(); st.childPaths.clear(); st.rejected.clear(); st.ignored = { counts: {}, samples: [] }; st.meta = {};
     persistSoon(tabId);
     updateBadge(tabId);
   }

@@ -222,11 +222,32 @@ const jobUpdates = (x, jobId) => x.sent.filter((m) => m.type === "job-update" &&
     eq(after.items.map((i) => i.url.split("/").pop()), ["song.mp3"], "old video cleared, new video's early request kept");
   });
 
-  await test("ONLY REAL FILES: an HTML error page behind an .m3u8 URL is not listed", async () => {
+  await test("ONLY REAL FILES: an HTML page behind an .m3u8 URL is not listed (decided by the page's own response)", async () => {
     const y = loadExtension({ ffmpeg }); y.browser.tabs.pages[22] = { id: 22, url: PAGE, title: "T" };
-    await y.net(22, server.base + "/media/drm/notmanifest.m3u8", { contentType: "application/vnd.apple.mpegurl" });
+    await y.net(22, server.base + "/media/drm/notmanifest.m3u8", { contentType: "text/html" });
     await sleep(600);
-    eq((await tabState(y, 22)).items.length, 0);
+    const s = await tabState(y, 22);
+    eq(s.items.length, 0); eq(s.ignored.counts["not-a-playlist"], 1);
+  });
+
+  await test("a real stream is NEVER deleted because our own second request got a different answer (session-bound links)", async () => {
+    const y = loadExtension({ ffmpeg }); y.browser.tabs.pages[23] = { id: 23, url: PAGE, title: "T" };
+    // the page's response said it is an HLS playlist; our re-fetch of this URL returns an HTML page (as session-bound links may)
+    await y.net(23, server.base + "/media/drm/notmanifest.m3u8", { contentType: "application/vnd.apple.mpegurl" });
+    await sleep(700);
+    const s = await tabState(y, 23);
+    eq(s.items.length, 1, "stream must stay listed"); eq(s.items[0].manifest.state, "unreadable");
+  });
+
+  await test("WHY NOTHING: the popup state reports what was seen but not listed (YouTube ump, segments, tiny files)", async () => {
+    const y = loadExtension({ ffmpeg }); y.browser.tabs.pages[24] = { id: 24, url: "https://www.youtube.com/watch?v=x", title: "YouTube" };
+    await y.net(24, "https://rr1---sn-abc.googlevideo.com/videoplayback?rn=1&n=abc&sig=xyz", { contentType: "application/vnd.yt-ump", resHeaders: [{ name: "Content-Length", value: "900000" }] });
+    for (let i = 0; i < 4; i++) await y.net(24, `https://cdn.example.test/seg-${i}.m4s`, { contentType: "video/iso.segment" });
+    await y.net(24, "https://www.youtube.com/s/search/audio/open.mp3", { contentType: "audio/mpeg", resHeaders: [{ name: "Content-Length", value: "6200" }] });
+    await sleep(100);
+    const s = await tabState(y, 24);
+    eq(s.items.length, 0); eq(s.ignored.counts["yt-ump"], 1); eq(s.ignored.counts.segment, 4); eq(s.ignored.counts.tiny, 1);
+    assert(s.ignored.samples.some((x) => x.reason === "yt-ump" && /videoplayback/.test(x.url)), "sample missing");
   });
 
   await test("companion-status sends a real ping and requires a valid pong (green path)", async () => {
