@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MediaGrab</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand-mark" aria-hidden="true">
+        <span class="dot a"></span><span class="dot b"></span><span class="dot c"></span>
+      </div>
+      <div class="brand-copy">
+        <strong>MediaGrab <span id="count" class="count-pill">0</span></strong>
+        <span id="subtitle">Detected media</span>
+      </div>
+      <button id="refresh" class="round-button" title="Rescan this page">↻</button>
+    </header>
+
+    <section id="notice" class="notice hidden" role="alert"></section>
+    <section id="items" class="items" aria-live="polite"></section>
+
+    <footer>
+      <button id="companion" class="companion unknown" title="Click to test the companion connection">
+        <span class="status-dot"></span><span id="companionText">Checking companion…</span>
+      </button>
+      <span id="totalSpeed" class="total-speed hidden" title="Combined download speed of active downloads"></span>
+      <button id="clear" class="square-button" title="Clear detected media">⌫</button>
+    </footer>
+  </main>
+
+  <template id="row-template">
+    <article class="media-row">
+      <div class="thumb"><span class="duration"></span></div>
+      <div class="media-info">
+        <div class="title-line"><span class="format-badge"></span><span class="title"></span></div>
+        <div class="subline"><span class="mime"></span><span class="size"></span></div>
+        <div class="url-line"></div>
+        <div class="quality-line hidden"><label>Quality <select class="quality"></select></label></div>
+        <div class="audio-line hidden"><label>Audio <select class="audio-track"></select></label></div>
+      </div>
+      <div class="row-actions">
+        <div class="split-button">
+          <button class="primary-action" title="Download"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M8 2v8M4.5 7 8 10.5 11.5 7M3 13.5h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Download</span></button>
+          <button class="menu-action" title="More actions" aria-haspopup="menu">&#8964;</button>
+        </div>
+      </div>
+      <div class="progress-wrap hidden">
+        <div class="progress-bar"><div class="progress-fill"></div></div>
+        <div class="progress-row"><div class="progress-text"></div><span class="speed hidden"></span><button class="cancel-job link-button hidden">Cancel</button></div>
+      </div>
+      <div class="details-box hidden"></div>
+    </article>
+  </template>
+
+  <template id="menu-template">
+    <div class="context-menu" role="menu">
+      <button data-action="av"><strong>Download Audio &amp; Video</strong></button>
+      <div class="separator"></div>
+      <button data-action="save-as">Download As…</button>
+      <button data-action="always-save-as">Always Download As…</button>
+      <div class="separator"></div>
+      <button data-action="audio">Download Audio</button>
+      <button data-action="always-audio">Always audio only for this website</button>
+      <div class="separator"></div>
+      <button data-action="copy">Copy URL</button>
+      <button data-action="always-copy">Always copy URL</button>
+      <div class="separator"></div>
+      <button data-action="smartname">Smartnaming <span class="menu-check"></span></button>
+      <button data-action="details">Details</button>
+    </div>
+  </template>
+
+  <script src="../lib/util.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

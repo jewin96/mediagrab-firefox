@@ -1,0 +1,58 @@
+{
+  "manifest_version": 3,
+  "name": "MediaGrab",
+  "version": "1.0.0",
+  "description": "Detect and download media you are authorized to save, including unencrypted HLS/DASH through the optional MediaGrab Companion.",
+  "author": "MediaGrab",
+  "permissions": [
+    "clipboardWrite",
+    "downloads",
+    "nativeMessaging",
+    "storage",
+    "tabs",
+    "webRequest"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "scripts": ["lib/util.js", "background.js"]
+  },
+  "action": {
+    "default_title": "MediaGrab",
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "96": "icons/icon-96.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png",
+    "128": "icons/icon-128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["lib/util.js", "content.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "{f9a06230-a51a-48bd-adc7-0c9eba38962d}",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    },
+    "gecko_android": {
+      "strict_min_version": "142.0"
+    }
+  }
+}
